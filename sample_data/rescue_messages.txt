@@ -1,0 +1,35 @@
+# ReliefStream sample rescue messages
+# One per line. Realistic mix of English, transliterated Tamil, WhatsApp-style forwards.
+# Includes intentionally ambiguous ones to exercise the "read yourself" pile.
+#
+# Usage: copy any subset, paste into the dashboard ingest form with "Bulk" checked.
+
+Family of 4 stranded on rooftop near Ganapathy 4th street opposite Bharat petrol pump water rising fast need immediate rescue contact 98765-43210
+Elderly couple 68 and 72 trapped in 2nd floor Peelamedu Palkalai Nagar 3rd cross knee-deep water inside house need boat pls forward
+URGENT!! 6 people including 2 kids stuck in Race Course road Devi Karumariamman kovil back gate area, drinking water empty for 24hrs, whatsapp me 87654XXXXX
+help needed vellalore my aunty diabetic patient needs insulin urgently water everywhere no chemist open, call 9840012345
+Man with fractured leg unable to move Saibaba colony 8th street opposite masjid, need medical evacuation, boat access possible via main road
+food packets needed for 30 families sheltered in RSPuram community hall since morning any NGO please help
+Anyone with a boat near Kuniyamuthur? Old lady in wheelchair on ground floor water almost at bed level, 9876543210
+Please share widely - young pregnant woman labor pains started Kavundampalayam last stop area, needs ambulance boat, family number 9500123456
+Water levels reducing in Sundakkamuthur area, our team already helped 8 families, can move to next area
+Received food packets from XYZ NGO in Singanallur, appreciate the help. Sharing so no duplicate delivery here.
+Chennai floods 2015 was terrible we should learn from that
+Tomorrow's news headline: Coimbatore rains break 20-year record
+சிங்காநல்லூர் aiyer street 3rd cross ல water level 5 feet, 4 people no food since yesterday, contact 8877665544
+Peelamedu near GRD college water inside classroom hostel students need help pls
+Missing person: my father 65 yrs went out for milk in Ramanathapuram 6am not returned please share his photo attached
+Rescue needed! Selvapuram sanitary board colony ward 45 house 12B, 3 disabled adults, phone dead, neighbour reporting via my number 9994567890
+Namma team ready with 2 boats where to go? Coimbatore anywhere just share location pls
+just heard sirens near race course area what happened
+Puliyakulam 2nd main opposite hospital, 8 kids in ground floor school building trapped, teachers with them, 9847123890
+Anyone knows if the Ondipudur bridge is open for vehicles? Trying to reach my parents
+15 stray dogs stranded on Nanjundapuram flyover, please help animal welfare team
+Fresh water bottles needed Vadavalli Manikaran temple 100 people sheltered since 5am
+Please dont come to Sundakkamuthur main road, water very deep, take alternate route via GHSS road
+Uncle in Vadavalli passed away last night now waiting for authorities to help with cremation family very distressed
+கவுண்டம்பாளையம் Palladam road ல bus stand பக்கம் Ranga colony ல 2 வயசு baby fever ஆ இருக்கு medicine கிடைக்கல please help
+Priya from Coimbatore here confirming NDRF has reached Ondipudur area, moving families to relief camp
+Water and biscuits collected at Kumaraguru college gate, drivers with vehicles please come to distribute
+Test message please ignore
+Wow the rain is really heavy this year

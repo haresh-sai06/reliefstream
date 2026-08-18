@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ReliefStream — Flood Rescue Coordination</title>
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-logo">RS</span>
+    <span class="brand-name">ReliefStream</span>
+    <span class="brand-tag">flood rescue coordination</span>
+  </div>
+  <div class="status">
+    <span id="connection-dot" class="conn-dot"></span>
+    <span id="connection-text">connecting…</span>
+    <span class="sep">·</span>
+    <span id="stats-summary">0 requests</span>
+  </div>
+</header>
+
+<main>
+  <!-- Left: ingest + list -->
+  <section class="pane pane-left">
+
+    <!-- Ingest form -->
+    <div class="card">
+      <div class="card-header">
+        <h2>Ingest</h2>
+        <span class="hint">Paste one rescue message per submission. Bulk paste uses one message per line.</span>
+      </div>
+      <textarea id="ingest-text" rows="4" placeholder="e.g. Family of 4 stranded on rooftop, Ganapathy 4th street opposite school, water rising fast, contact 98765-XXXXX"></textarea>
+      <div class="ingest-controls">
+        <select id="ingest-source">
+          <option value="paste">Paste</option>
+          <option value="whatsapp">WhatsApp</option>
+          <option value="twitter">Twitter</option>
+          <option value="instagram">Instagram</option>
+          <option value="sms">SMS</option>
+        </select>
+        <label class="checkbox">
+          <input type="checkbox" id="ingest-bulk"> Bulk (one message per line)
+        </label>
+        <button id="ingest-btn" class="btn btn-primary">Submit</button>
+      </div>
+      <div id="ingest-result" class="ingest-result"></div>
+    </div>
+
+    <!-- Filter tabs -->
+    <div class="tabs">
+      <button class="tab active" data-filter="all">All <span class="tab-count" id="count-all">0</span></button>
+      <button class="tab" data-filter="new">New <span class="tab-count" id="count-new">0</span></button>
+      <button class="tab" data-filter="claimed">Claimed <span class="tab-count" id="count-claimed">0</span></button>
+      <button class="tab" data-filter="resolved">Resolved <span class="tab-count" id="count-resolved">0</span></button>
+      <button class="tab tab-warn" data-filter="unparseable">Read yourself <span class="tab-count" id="count-unparseable">0</span></button>
+    </div>
+
+    <!-- Request list -->
+    <div id="request-list" class="request-list">
+      <div class="empty">Loading…</div>
+    </div>
+  </section>
+
+  <!-- Right: map -->
+  <section class="pane pane-right">
+    <div id="map"></div>
+    <div class="map-legend">
+      <span class="legend-item"><span class="dot immediate"></span> Immediate</span>
+      <span class="legend-item"><span class="dot high"></span> High</span>
+      <span class="legend-item"><span class="dot medium"></span> Medium</span>
+      <span class="legend-item"><span class="dot low"></span> Low</span>
+    </div>
+  </section>
+</main>
+
+<!-- Detail modal -->
+<div id="modal" class="modal hidden">
+  <div class="modal-content" id="modal-content"></div>
+</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
