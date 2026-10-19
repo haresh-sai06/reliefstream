@@ -156,12 +156,14 @@ def evaluate(rows: list[dict], extract_fn) -> dict:
         else:
             ctn += 1
 
-    # 3) dedup: pairwise over all messages using the production fingerprint
+    # 3) dedup: pairwise using production fuzzy matcher (location norm + Jaccard)
     fps = [storage._fingerprint(r["text"], e) for r, e in zip(rows, preds)]
     dtp = dfp = dfn = 0
     for i, j in itertools.combinations(range(len(rows)), 2):
         same_gold = rows[i]["cluster"] == rows[j]["cluster"]
-        same_pred = fps[i] == fps[j]
+        same_pred = storage.is_duplicate_extracted(
+            preds[i], preds[j], rows[i]["text"], rows[j]["text"]
+        )
         dtp += same_gold and same_pred
         dfp += (not same_gold) and same_pred
         dfn += same_gold and (not same_pred)
@@ -187,12 +189,25 @@ def main() -> None:
     ap.add_argument("--data", default=str(ROOT / "eval" / "labeled_messages.jsonl"))
     ap.add_argument("--mode", choices=["llm", "gold"], default="llm")
     ap.add_argument("--out", default=None, help="write full JSON results here")
+    ap.add_argument("--holdout", choices=["none", "dev", "test"], default="none",
+                    help="cluster-level split: tune on dev, report test (no cross-pair leakage)")
     args = ap.parse_args()
 
     rows = load(Path(args.data))
+    holdout = getattr(args, "holdout", "none")
+    if holdout != "none":
+        # Split by cluster id so duplicate pairs never cross the cut.
+        clusters = sorted({r["cluster"] for r in rows})
+        mid = len(clusters) // 2
+        # even index = tune/dev, odd = hold-out test (or vice versa)
+        if holdout == "dev":
+            keep = set(clusters[:mid])
+        else:  # test
+            keep = set(clusters[mid:])
+        rows = [r for r in rows if r["cluster"] in keep]
     if args.mode == "gold":
         fn = gold_extractor
-        meta = {"mode": "gold (oracle extractor, harness smoke test only)"}
+        meta = {"mode": "gold (oracle extractor, harness smoke test only)", "holdout": holdout, "n_after_split": len(rows)}
     else:
         try:
             from dotenv import load_dotenv
@@ -201,7 +216,7 @@ def main() -> None:
             pass
         import extractor
         fn = lambda row: extractor.extract(row["text"])  # noqa: E731
-        meta = {"mode": "llm", "model": extractor.LLM_MODEL, "base_url": extractor.LLM_BASE_URL}
+        meta = {"mode": "llm", "model": extractor.LLM_MODEL, "base_url": extractor.LLM_BASE_URL, "holdout": holdout, "n_after_split": len(rows)}
 
     res = {"meta": meta, **evaluate(rows, fn)}
     summary = {k: v for k, v in res.items() if k != "predictions"}

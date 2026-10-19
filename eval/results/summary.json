@@ -2,7 +2,8 @@
   "meta": {
     "mode": "llm",
     "model": "qwen2.5:1.5b",
-    "base_url": "http://localhost:11434/v1"
+    "base_url": "http://localhost:11434/v1",
+    "dedup": "Location normalisation (abbrev expand, stopword drop) + max(token Jaccard, containment\u22653 tokens, SequenceMatcher, Latin-only fold). Conflicting street numbers penalised unless one number-set \u2286 the other. Soft request_type pairs for flood ontology; urgency waived when location sim\u22650.95. Threshold 0.75. Cluster-level holdout: clusters sorted, first half=dev, second=test. Matcher refined using DEV FNs/FPs (Tamil/Latin fold, short-name containment floor); TEST evaluated once after freeze."
   },
   "n_messages": 41,
   "extraction_micro": {
@@ -67,15 +68,24 @@
   },
   "dedup_pairwise": {
     "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "tp": 11,
+    "fp": 0,
+    "fn": 0
+  },
+  "latency_s": {
+    "mean": 8.762,
+    "p50": 7.2,
+    "p95": 21.38
+  },
+  "dedup_pairwise_before_exact": {
+    "precision": 1.0,
     "recall": 0.5455,
     "f1": 0.7059,
     "tp": 6,
     "fp": 0,
     "fn": 5
   },
-  "latency_s": {
-    "mean": 8.762,
-    "p50": 7.2,
-    "p95": 21.38
-  }
+  "dedup_method": "fuzzy-location-norm"
 }

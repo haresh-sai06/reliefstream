@@ -24,7 +24,7 @@ ReliefStream is a single-screen dashboard that:
 
 1. **Ingests** raw social / WhatsApp / SMS text (paste, bulk, or `POST /ingest`)
 2. **Extracts** structured fields via any OpenAI-compatible LLM (Ollama / Groq / OpenRouter / Gemini)
-3. **Deduplicates** by fingerprint (`location|type|urgency`, or normalised text if unparseable)
+3. **Deduplicates** with normalised + fuzzy location matching (Jaccard/containment/Latin-fold)
 4. **Maps** actionable requests on Leaflet; volunteers claim / resolve
 5. **Escalates failures** — low-confidence or incomplete parses land in a **"Read yourself"** pile
 
@@ -35,7 +35,7 @@ ReliefStream is a single-screen dashboard that:
 ```mermaid
 flowchart LR
   IN[Ingest<br/>paste · bulk · webhook] --> EX[Extractor<br/>OpenAI-compatible LLM]
-  EX -->|parseable| DEDUP[Fingerprint dedup<br/>SQLite]
+  EX -->|parseable| DEDUP[Fuzzy location dedup<br/>SQLite]
   EX -->|unparseable / low conf| PILE[Read-yourself pile]
   DEDUP --> API[FastAPI + SSE]
   PILE --> API
@@ -50,7 +50,7 @@ flowchart LR
 | Refuse to mark `parseable` without location + urgency + type + confidence ≥ 0.4 | Wrong pin > no pin during a flood | More items in the human pile |
 | OpenAI-compatible client (not a vendor SDK) | Swap Ollama ↔ Groq ↔ OpenRouter with env vars | No vendor-specific tool calling |
 | SQLite + in-process SSE | Zero-ops local / single-container deploy | Scale-out needs Postgres + Redis (documented) |
-| Fingerprint on `location\|type\|urgency` | Collapses 40 WhatsApp forwards into one card | LLM location wording drift lowers dedup recall (see results) |
+| Fuzzy location dedup (norm + Jaccard/containment) | Collapses WhatsApp forwards despite LLM wording drift | Near-identical streets (e.g. GRD vs Hope College) can still collide |
 
 ---
 
@@ -68,10 +68,10 @@ Model measured here: **Qwen2.5-1.5B-Instruct Q4_K_M** via `llama.cpp` `llama-ser
 | People-count F1 | 0.872 |
 | Contact F1 | 0.882 |
 | Actionable classification F1 | **0.923** (acc 0.892) |
-| Dedup pairwise F1 | **0.706** (P 1.00 / R 0.545) |
+| Dedup pairwise F1 | **1.00** (P 1.00 / R **1.00**; was P 1.00 / R 0.545 / F1 0.706 with exact fingerprint) |
 | Latency mean / p50 / p95 | 8.76 s / 7.20 s / 21.4 s (CPU, 1.5B Q4) |
 
-Dedup recall is the weak spot: the fingerprint key uses the LLM's free-text `location`, so "Ganapathy 4th street" vs "Ganapathy 4th st, opp Bharat petrol bunk" miss each other. Fixing that (geocoding / fuzzy location) is the next lever — not papered over here.
+Dedup now uses location normalisation + fuzzy matching (token Jaccard, ≥3-token containment, Latin-only fold for Tamil/English pairs, soft type pairs). Measured on the same 41-message set with a **cluster-level holdout** (dev = first half of clusters for matcher design; test = second half, evaluated once): holdout-test P=R=F1=**1.00**. Full-set before→after recall **0.545 → 1.00** (exact fingerprint → fuzzy; qwen2.5:1.5b extractions). See `eval/results/dedup_before_after.json`.
 
 Full JSON: [`eval/results/summary.json`](eval/results/summary.json).
 

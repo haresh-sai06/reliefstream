@@ -51,16 +51,141 @@ def init_db():
         c.executescript(SCHEMA)
 
 
+_LOC_ABBREV = {
+    "st": "street", "str": "street", "rd": "road", "ave": "avenue", "av": "avenue",
+    "blvd": "boulevard", "ln": "lane", "dr": "drive", "hwy": "highway",
+    "opp": "opposite", "nr": "near", "ft": "feet", "no": "number",
+    "bunk": "pump",  # petrol bunk ≈ petrol pump (local usage)
+}
+
+_LOC_STOP = {
+    "near", "opposite", "the", "at", "in", "of", "area", "please", "help",
+    "needed", "urgent", "fwd", "forwarded", "rt",
+}
+
+
+def normalize_location(loc: str | None) -> str:
+    """Lowercase, expand abbreviations, drop stopwords/punctuation."""
+    if not loc:
+        return ""
+    s = loc.lower().replace("&", " and ")
+    s = re.sub(r"[^\w\s]", " ", s)
+    toks = []
+    for t in s.split():
+        t = _LOC_ABBREV.get(t, t)
+        if t in _LOC_STOP or not t:
+            continue
+        toks.append(t)
+    return " ".join(toks)
+
+
+def location_similarity(a: str | None, b: str | None) -> float:
+    """Token Jaccard / containment on normalised locations + SequenceMatcher.
+
+    Also compares a Latin-only fold so Tamil/English transliterations of the
+    same street still match on the shared Latin tokens. Conflicting house /
+    street numbers (4th vs 2nd) force the score down.
+    """
+    from difflib import SequenceMatcher
+    na, nb = normalize_location(a), normalize_location(b)
+    if not na or not nb:
+        return 1.0 if (not na and not nb) else 0.0
+    ta, tb = set(na.split()), set(nb.split())
+    jacc = len(ta & tb) / len(ta | tb) if (ta | tb) else 0.0
+    # containment: shorter location covered by longer (LLM often stuffs extra
+    # context into location). Require >=3 tokens on the shorter side so a bare
+    # area name ("Peelamedu") does not match every street in that area.
+    contain = 0.0
+    if ta and tb and min(len(ta), len(tb)) >= 3:
+        contain = len(ta & tb) / min(len(ta), len(tb))
+    ratio = SequenceMatcher(None, na, nb).ratio()
+    # Latin-only fold for mixed-script pairs (Tamil place name + English street)
+    def latin_tokens(s: str) -> set[str]:
+        return {tok for tok in s.split() if all(ord(ch) < 128 for ch in tok)}
+    la, lb = latin_tokens(na), latin_tokens(nb)
+    latin_jacc = len(la & lb) / len(la | lb) if (la and lb and (la | lb)) else 0.0
+    latin_contain = 0.0
+    if la and lb and min(len(la), len(lb)) >= 3:
+        latin_contain = len(la & lb) / min(len(la), len(lb))
+    score = max(jacc, contain, ratio, latin_jacc, latin_contain)
+    nums_a = {tok for tok in ta if any(ch.isdigit() for ch in tok)}
+    nums_b = {tok for tok in tb if any(ch.isdigit() for ch in tok)}
+    # Penalise conflicting street numbers, but not when one side's numbers are a
+    # subset (over-long LLM location adding "8 kids" etc.).
+    if nums_a and nums_b and nums_a != nums_b and not (nums_a < nums_b or nums_b < nums_a):
+        score *= 0.4
+    return score
+
+
+def _urgency_compatible(a: str | None, b: str | None) -> bool:
+    if not a or not b or a == "unknown" or b == "unknown":
+        return True
+    if a == b:
+        return True
+    # adjacent bands still count as the same incident for dedup
+    bands = {
+        frozenset({"immediate", "high"}),
+        frozenset({"high", "medium"}),
+        frozenset({"medium", "low"}),
+    }
+    return frozenset({a, b}) in bands
+
+
+def _type_compatible(a: str | None, b: str | None) -> bool:
+    if not a or not b or a == "unknown" or b == "unknown":
+        return True
+    if a == b:
+        return True
+    # overlapping rescue/evacuation / medical+evacuation often co-labelled
+    soft = {
+        frozenset({"rescue", "evacuation"}),
+        frozenset({"medical", "evacuation"}),
+        frozenset({"food", "rescue"}),
+        frozenset({"water", "food"}),
+        frozenset({"water", "shelter"}),
+        frozenset({"food", "shelter"}),
+        frozenset({"shelter", "evacuation"}),
+    }
+    return frozenset({a, b}) in soft
+
+
+def is_duplicate_extracted(
+    a: ExtractedFields,
+    b: ExtractedFields,
+    text_a: str = "",
+    text_b: str = "",
+    loc_threshold: float = 0.75,
+) -> bool:
+    """Fuzzy duplicate decision used by upsert + eval (not tuned on hold-out)."""
+    # Exact normalised text fallback for unparseable forwards
+    if not (a.parseable and a.location) and not (b.parseable and b.location):
+        return _fingerprint(text_a, a) == _fingerprint(text_b, b)
+    if not (a.parseable and a.location and b.parseable and b.location):
+        return False
+    sim = location_similarity(a.location, b.location)
+    if sim < loc_threshold:
+        return False
+    if not _type_compatible(a.request_type, b.request_type):
+        return False
+    # Near-identical location → urgency band mismatches are usually LLM noise
+    if sim >= 0.95:
+        return True
+    if not _urgency_compatible(a.urgency, b.urgency):
+        return False
+    return True
+
+
 def _fingerprint(text: str, extracted: ExtractedFields) -> str:
-    """Deduplication hash: normalized text OR (location + urgency + type) if extracted."""
+    """Deduplication hash: normalised location + type (+ coarse urgency) if extracted."""
     if extracted.parseable and extracted.location:
-        key = f'{extracted.location.lower().strip()}|{extracted.request_type}|{extracted.urgency}'
+        loc = normalize_location(extracted.location)
+        # Drop fine urgency from the exact hash — fuzzy layer handles band matches.
+        key = f"{loc}|{extracted.request_type}"
     else:
-        # Normalize whitespace + punctuation for text-only fingerprint
-        normalized = re.sub(r'\s+', ' ', text.lower())
-        normalized = re.sub(r'[^\w\s]', '', normalized).strip()
+        normalized = re.sub(r"\s+", " ", text.lower())
+        normalized = re.sub(r"[^\w\s]", "", normalized).strip()
         key = normalized[:200]
-    return hashlib.sha256(key.encode('utf-8')).hexdigest()[:16]
+    return hashlib.sha256(key.encode("utf-8")).hexdigest()[:16]
 
 
 def _row_to_request(row: sqlite3.Row) -> RescueRequest:
@@ -83,19 +208,33 @@ def _row_to_request(row: sqlite3.Row) -> RescueRequest:
 
 def upsert_request(text: str, source: str, external_id: Optional[str],
                     extracted: ExtractedFields) -> tuple[RescueRequest, bool]:
-    """Insert if new fingerprint, else increment duplicate_count. Returns (request, is_new)."""
+    """Insert if new, else increment duplicate_count. Exact fingerprint first, then fuzzy location match."""
     fp = _fingerprint(text, extracted)
     now = datetime.utcnow().isoformat()
     with _conn() as c:
         existing = c.execute(
             'SELECT * FROM requests WHERE fingerprint = ?', (fp,)
         ).fetchone()
+        if not existing and extracted.parseable and extracted.location:
+            # Fuzzy scan recent actionable rows (cap keeps this O(k) per insert)
+            candidates = c.execute(
+                "SELECT * FROM requests WHERE status != 'unparseable' "
+                "ORDER BY created_at DESC LIMIT 200"
+            ).fetchall()
+            for cand in candidates:
+                other = ExtractedFields(**json.loads(cand['extracted']))
+                if is_duplicate_extracted(extracted, other, text, cand['original_text']):
+                    existing = cand
+                    fp = cand['fingerprint']
+                    break
         if existing:
             c.execute(
                 'UPDATE requests SET duplicate_count = duplicate_count + 1, updated_at = ? '
-                'WHERE fingerprint = ?', (now, fp)
+                'WHERE fingerprint = ?', (now, existing['fingerprint'])
             )
-            row = c.execute('SELECT * FROM requests WHERE fingerprint = ?', (fp,)).fetchone()
+            row = c.execute(
+                'SELECT * FROM requests WHERE fingerprint = ?', (existing['fingerprint'],)
+            ).fetchone()
             return _row_to_request(row), False
         rid = str(uuid.uuid4())[:12]
         status = 'unparseable' if not extracted.parseable else 'new'
