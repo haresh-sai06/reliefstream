@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.staticfiles import StaticFiles
+from pathlib import Path
 from sse_starlette.sse import EventSourceResponse
 
 load_dotenv()
@@ -76,6 +78,8 @@ async def root():
             'POST /requests/{id}/triage',
             'GET /stats',
             'GET /stream',
+            'GET /healthz',
+            'GET /ui (dashboard)',
         ],
     }
 
@@ -157,6 +161,12 @@ async def resolve(rid: str, body: ResolveRequest):
     return r
 
 
+@app.get('/healthz', tags=['meta'])
+async def healthz():
+    """Liveness probe for Docker / Render / Fly / Cloud Run."""
+    return {'status': 'ok', 'model': extractor.LLM_MODEL}
+
+
 @app.get('/stats', tags=['read'])
 async def get_stats():
     return storage.stats()
@@ -181,6 +191,12 @@ async def stream():
             raise
 
     return EventSourceResponse(event_gen())
+
+
+# Serve the static dashboard from the same origin at /ui (single-container deploys).
+_FRONTEND_DIR = Path(os.getenv('FRONTEND_DIR', Path(__file__).resolve().parent.parent / 'frontend'))
+if _FRONTEND_DIR.is_dir():
+    app.mount('/ui', StaticFiles(directory=str(_FRONTEND_DIR), html=True), name='ui')
 
 
 if __name__ == '__main__':

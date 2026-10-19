@@ -1,6 +1,9 @@
 // ReliefStream frontend — vanilla JS
 
-const API = 'http://localhost:8000';
+// Same-origin when served by the backend at /ui (Docker / cloud); localhost:8000 for the
+// two-terminal dev setup (python -m http.server 8080). Override with window.RELIEFSTREAM_API.
+const API = window.RELIEFSTREAM_API
+  || (location.pathname.startsWith('/ui') ? location.origin : 'http://localhost:8000');
 const state = {
   requests: [],
   filter: 'all',

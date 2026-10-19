@@ -4,190 +4,140 @@
 
 ### Real-time centralization of flood-rescue requests from social media chaos
 
-*Volunteers can't coordinate when rescue calls are scattered across Twitter, WhatsApp forwards, and Instagram DMs. ReliefStream funnels them into one prioritized dashboard.*
+*Ingest → LLM extract → dedup → map → claim. Ambiguous parses go to a human, never silently dropped.*
 
 ![Status](https://img.shields.io/badge/status-MVP-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 ![Stack](https://img.shields.io/badge/stack-FastAPI%20·%20Ollama%20·%20Leaflet-cyan)
-![SDG](https://img.shields.io/badge/UN%20SDG-3%20·%20Good%20Health%20%26%20Well--being-purple)
 
 </div>
 
 ---
 
-## The problem
+## Problem
 
-When floods hit — Chennai 2015, Kerala 2018, Hyderabad 2020, Bengaluru 2022, every monsoon somewhere — the first hours are chaos. Rescue requests scatter across:
+During floods, rescue requests scatter across Twitter, WhatsApp forwards, and Instagram DMs. Volunteers spend more time **finding** requests than acting on them, and the same cry for help gets forwarded dozens of times while an untouched one across town waits. A confident wrong location from an LLM is worse than no answer — it sends a boat to the wrong street.
 
-- Twitter threads with garbled locations
-- WhatsApp forwards that lose context after 3 hops
-- Instagram DMs with only a photo and a postcode
-- Facebook posts with hundreds of comments burying the actual address
+## Solution
 
-Local volunteers show up ready to help but spend more time **finding requests** than acting on them. Meanwhile the same request gets forwarded 40 times while an untouched request across town waits.
+ReliefStream is a single-screen dashboard that:
 
-Existing government helplines exist but are structured (call, form, wait). The chaotic, informal channels are where real requests actually flow in the first hour.
-
-## The solution
-
-**ReliefStream is a single-screen dashboard that:**
-
-1. **Ingests** raw social media text (paste-in or webhook)
-2. **Extracts** structured fields via LLM: location, urgency, request type, people affected, contact number
-3. **Deduplicates** — a request forwarded 40 times becomes one card with 40 "confirmed by" markers
-4. **Maps** all requests as pins on Leaflet with severity color-coding
-5. **Assigns** — volunteers claim requests, mark them resolved, log outcomes
-6. **Surfaces failures** — when the model can't parse a location, that request goes to a **"Read this yourself"** pile visible to a human operator, never silently dropped
-
-The last one is the most important design decision: **a confident wrong answer during a flood is worse than no answer.** A misread pincode sends volunteers to the wrong neighborhood while a family waits on a rooftop. Every ambiguous parse is escalated to a human.
-
----
-
-## What ReliefStream is not
-
-To keep scope honest:
-
-- **Not** an emergency dispatch service. It doesn't call 108 for you or promise SLA.
-- **Not** a replacement for NDRF/SDRF. It's a coordination layer for informal volunteer networks.
-- **Not** a general-purpose disaster tool. Scoped to flood rescue coordination in the first 24-72 hrs of an event.
-- **Not** deployable without a human operator watching the "read this yourself" pile.
+1. **Ingests** raw social / WhatsApp / SMS text (paste, bulk, or `POST /ingest`)
+2. **Extracts** structured fields via any OpenAI-compatible LLM (Ollama / Groq / OpenRouter / Gemini)
+3. **Deduplicates** by fingerprint (`location|type|urgency`, or normalised text if unparseable)
+4. **Maps** actionable requests on Leaflet; volunteers claim / resolve
+5. **Escalates failures** — low-confidence or incomplete parses land in a **"Read yourself"** pile
 
 ---
 
 ## Architecture
 
-```
-┌────────────────────────────────────────────────────────────────┐
-│  INGEST                                                        │
-│  paste-in web form  ·  webhook /ingest  ·  bulk file upload    │
-└────────────────────────────┬───────────────────────────────────┘
-                             ▼
-┌────────────────────────────────────────────────────────────────┐
-│  EXTRACTOR — Ollama (qwen2.5:7b) via OpenAI-compatible API     │
-│  output: { location, urgency, type, people, contact,           │
-│            confidence, parseable }                             │
-└──────────────┬────────────────────────┬────────────────────────┘
-    parseable=true            parseable=false / low confidence
-               ▼                        ▼
-┌──────────────────────────┐  ┌──────────────────────────────────┐
-│  DEDUP + STORE (SQLite)  │  │  UNPARSEABLE PILE                │
-│  fingerprint hash        │  │  "read this yourself" queue      │
-└──────────────┬───────────┘  │  operator triages manually       │
-               ▼              └──────────────────┬───────────────┘
-┌──────────────────────────┐                     │
-│  DASHBOARD               │◀────────────────────┘
-│  · Map (Leaflet)         │   both feed the dashboard;
-│  · List (filter/sort)    │   unparseable badge stays visible
-│  · Claim / Resolve       │   until human resolves
-│  · Live via SSE          │
-└──────────────────────────┘
+```mermaid
+flowchart LR
+  IN[Ingest<br/>paste · bulk · webhook] --> EX[Extractor<br/>OpenAI-compatible LLM]
+  EX -->|parseable| DEDUP[Fingerprint dedup<br/>SQLite]
+  EX -->|unparseable / low conf| PILE[Read-yourself pile]
+  DEDUP --> API[FastAPI + SSE]
+  PILE --> API
+  API --> UI[Leaflet dashboard /ui]
+  API --> VOL[Claim · triage · resolve]
 ```
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full walkthrough.
+**Design decisions / trade-offs**
+
+| Decision | Why | Trade-off |
+|---|---|---|
+| Refuse to mark `parseable` without location + urgency + type + confidence ≥ 0.4 | Wrong pin > no pin during a flood | More items in the human pile |
+| OpenAI-compatible client (not a vendor SDK) | Swap Ollama ↔ Groq ↔ OpenRouter with env vars | No vendor-specific tool calling |
+| SQLite + in-process SSE | Zero-ops local / single-container deploy | Scale-out needs Postgres + Redis (documented) |
+| Fingerprint on `location\|type\|urgency` | Collapses 40 WhatsApp forwards into one card | LLM location wording drift lowers dedup recall (see results) |
 
 ---
 
-## Key design decisions
+## Results (measured)
 
-| Decision | Why |
+Eval set: 41 labelled messages in [`eval/labeled_messages.jsonl`](eval/labeled_messages.jsonl).  
+Model measured here: **Qwen2.5-1.5B-Instruct Q4_K_M** via `llama.cpp` `llama-server` (CPU). Re-run with your production model to refresh the table — see [`eval/README.md`](eval/README.md).
+
+| Metric | Value |
 |---|---|
-| **Local Ollama over cloud LLM** | Zero cost, runs on a laptop in an offline field kit, no rate limits during a surge |
-| **SQLite over PostgreSQL** | One file, no DB server to set up during a crisis, backup by `cp` |
-| **Server-Sent Events over WebSockets** | Simpler; volunteers only receive updates, don't need to push |
-| **Vanilla JS + Leaflet** | No build step, single HTML file, works on any browser without npm |
-| **Explicit "unparseable" queue** | The safety pattern the mentor brief flags is non-negotiable — chose to build it in from day 1, not add it later |
-| **Fingerprint dedup** | Twitter/WhatsApp copies the same rescue request 40× — hashing keeps the queue clean |
+| Extraction micro-F1 (5 fields) | **0.901** (P 0.893 / R 0.909) |
+| Location F1 | 0.857 |
+| Urgency F1 | 1.000 |
+| Request-type F1 | 0.880 |
+| People-count F1 | 0.872 |
+| Contact F1 | 0.882 |
+| Actionable classification F1 | **0.923** (acc 0.892) |
+| Dedup pairwise F1 | **0.706** (P 1.00 / R 0.545) |
+| Latency mean / p50 / p95 | 8.76 s / 7.20 s / 21.4 s (CPU, 1.5B Q4) |
+
+Dedup recall is the weak spot: the fingerprint key uses the LLM's free-text `location`, so "Ganapathy 4th street" vs "Ganapathy 4th st, opp Bharat petrol bunk" miss each other. Fixing that (geocoding / fuzzy location) is the next lever — not papered over here.
+
+Full JSON: [`eval/results/summary.json`](eval/results/summary.json).
 
 ---
+
+## Quickstart
+
+```bash
+# backend
+cd backend && python -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+cp .env.example .env          # point LLM_* at Ollama / Groq / …
+uvicorn main:app --reload --port 8000
+
+# frontend (dev) — or just open http://localhost:8000/ui when using Docker
+cd frontend && python -m http.server 8080
+```
+
+```bash
+# tests + eval harness (no LLM needed for unit tests / --mode gold)
+pip install -r backend/requirements.txt pytest httpx
+pytest -q
+python eval/run_eval.py --mode gold
+```
+
+### Docker
+
+```bash
+docker compose up -d
+docker compose exec ollama ollama pull qwen2.5:7b   # first run
+# dashboard: http://localhost:8000/ui
+```
+
+### Deploy (not deployed from this PR — no cloud credentials)
+
+- **Render:** [`render.yaml`](render.yaml) blueprint; set `LLM_API_KEY` as a secret (Groq / OpenRouter).
+- **Fly.io:** [`fly.toml`](fly.toml) — `fly launch --no-deploy && fly secrets set LLM_API_KEY=… && fly deploy`.
+- **Cloud Run:** step-by-step in [`deploy/cloudrun.md`](deploy/cloudrun.md).
+
+All three serve the API + dashboard at `/ui` and expose `/healthz`.
+
+---
+
+## API surface
+
+| Method | Path | Purpose |
+|---|---|---|
+| POST | `/ingest`, `/ingest/bulk` | extract + upsert |
+| GET | `/requests`, `/requests/{id}` | list / detail |
+| POST | `/requests/{id}/claim\|triage\|resolve` | workflow |
+| GET | `/stats`, `/stream` | counts + SSE |
+| GET | `/healthz` | liveness |
+| GET | `/ui` | static dashboard |
+
+---
+
+## CI
+
+Workflow template: [`ci/github-actions.yml`](ci/github-actions.yml). Copy to `.github/workflows/ci.yml` on `main` (this PR's token lacked the `workflow` scope, so the file cannot live under `.github/workflows/` yet).
 
 ## Tech stack
 
-**Backend**
-- Python 3.11 + FastAPI (async, auto-docs)
-- Ollama + `qwen2.5:7b` (LLM extraction, local, ₹0)
-- SQLite (persistence, one file)
-- OpenAI-compatible SDK (swap Ollama for Gemini/Claude with one env change)
-
-**Frontend**
-- Vanilla HTML + JS (no build step)
-- Leaflet.js (open-source maps)
-- OpenStreetMap tiles (no API key)
-- Server-Sent Events for live updates
-
-**Ops**
-- No external dependencies at runtime beyond an Ollama server
-- Single-file deploy: `git clone && cd backend && pip install -r requirements.txt && uvicorn main:app`
-
----
-
-## Quick start
-
-Two commands after clone:
-
-```bash
-# 1. Backend
-cd backend
-pip install -r requirements.txt
-cp .env.example .env    # defaults to local Ollama, no key required
-uvicorn main:app --reload --port 8000
-
-# 2. Frontend (any static server, or open index.html directly)
-cd ../frontend
-python -m http.server 8080
-# open http://localhost:8080
-```
-
-Prerequisites: `ollama pull qwen2.5:7b` if not already local. Or swap `.env` to point at Gemini/Groq/OpenRouter.
-
-Sample data to test with is in [`sample_data/`](sample_data/) — realistic-style rescue messages you can paste into the dashboard ingest form.
-
----
-
-## Cost
-
-| Deployment | Cost per parsed request |
-|---|---|
-| Local Ollama | ₹0 (electricity only) |
-| Gemini 2.5 Flash free tier | ₹0 up to 1M tokens/day |
-| Gemini 2.5 Flash paid | ~₹0.05 |
-| Claude Haiku 4.5 | ~₹0.15 |
-
-During a real flood surge (10,000+ messages/hour), local deployment is the only economically defensible option.
-
----
-
-## Roadmap
-
-- **Phase 1 (this MVP)** — paste-in ingest, LLM extraction, map + list dashboard, unparseable pile, manual claim/resolve
-- **Phase 2** — webhook receivers for Twitter API, WhatsApp Business API, Meta Graph API
-- **Phase 3** — geocoding integration (Nominatim / MapmyIndia) so "opposite Kovai Kutralam" resolves to lat/lon
-- **Phase 4** — SMS/WhatsApp notifications back to requester when a volunteer claims their request
-- **Phase 5** — multi-language: Tamil, Malayalam, Kannada, Telugu, Hindi extraction (currently English + transliterated Tamil)
-- **Phase 6** — offline-first mode: PWA with local model, works when 4G is saturated
-- **Phase 7** — post-event analytics: response times, coverage gaps, volunteer utilization
-
----
-
-## Origin
-
-Inspired by problem statement **#205** at *Tech for Good — Code for Communities 2026* (Dr. G. R. Damodaran College of Science, Coimbatore, Aug 8-9, 2026), attributed in the mentor brief to team "Black hole" (Daksh Chariwal, Huzefa Saroodwala, Mahipal Singh U, Tarun Kumar B). This is an **independent implementation** of that same problem statement — not affiliated with the original team.
-
-The mentor brief flagged one non-negotiable safety condition:
-
-> *"Build the pile of requests you could not parse. When the model cannot extract a location, or is unsure, that request must appear somewhere visible marked 'read this yourself'."*
-
-ReliefStream implements exactly that. See [`docs/PROBLEM.md`](docs/PROBLEM.md) for the full source.
+FastAPI · Pydantic · SQLite · OpenAI-compatible LLM (Ollama / Groq / OpenRouter / Gemini) · Leaflet · SSE · Docker · pytest
 
 ---
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
-
-Attribution appreciated when deployed. If you use this for an actual flood response, please cite in your post-event report so the safety patterns propagate.
-
----
-
-<div align="center">
-<sub>Built as a reference implementation for Code for Communities · Tech for Good 2026</sub>
-</div>
+MIT. Built for Code for Communities 2026.

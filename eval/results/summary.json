@@ -1,0 +1,81 @@
+{
+  "meta": {
+    "mode": "llm",
+    "model": "qwen2.5:1.5b",
+    "base_url": "http://localhost:11434/v1"
+  },
+  "n_messages": 41,
+  "extraction_micro": {
+    "precision": 0.8929,
+    "recall": 0.9091,
+    "f1": 0.9009,
+    "tp": 100,
+    "fp": 12,
+    "fn": 10
+  },
+  "extraction_per_field": {
+    "location": {
+      "precision": 0.875,
+      "recall": 0.84,
+      "f1": 0.8571,
+      "tp": 21,
+      "fp": 3,
+      "fn": 4
+    },
+    "urgency": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1": 1.0,
+      "tp": 25,
+      "fp": 0,
+      "fn": 0
+    },
+    "request_type": {
+      "precision": 0.88,
+      "recall": 0.88,
+      "f1": 0.88,
+      "tp": 22,
+      "fp": 3,
+      "fn": 3
+    },
+    "people_count": {
+      "precision": 0.8095,
+      "recall": 0.9444,
+      "f1": 0.8718,
+      "tp": 17,
+      "fp": 4,
+      "fn": 1
+    },
+    "contact": {
+      "precision": 0.8824,
+      "recall": 0.8824,
+      "f1": 0.8824,
+      "tp": 15,
+      "fp": 2,
+      "fn": 2
+    }
+  },
+  "actionable_classification": {
+    "precision": 0.8889,
+    "recall": 0.96,
+    "f1": 0.9231,
+    "tp": 24,
+    "fp": 3,
+    "fn": 1,
+    "tn": 9,
+    "accuracy": 0.8919
+  },
+  "dedup_pairwise": {
+    "precision": 1.0,
+    "recall": 0.5455,
+    "f1": 0.7059,
+    "tp": 6,
+    "fp": 0,
+    "fn": 5
+  },
+  "latency_s": {
+    "mean": 8.762,
+    "p50": 7.2,
+    "p95": 21.38
+  }
+}

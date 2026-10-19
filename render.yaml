@@ -1,0 +1,18 @@
+# Render Blueprint (https://render.com/docs/blueprint-spec). Not deployed yet.
+# Render has no GPU/Ollama, so point LLM_* at a hosted OpenAI-compatible API
+# (Groq / OpenRouter / Gemini) and set LLM_API_KEY as a secret in the dashboard.
+services:
+  - type: web
+    name: reliefstream
+    runtime: docker
+    plan: free
+    healthCheckPath: /healthz
+    envVars:
+      - key: LLM_BASE_URL
+        value: https://api.groq.com/openai/v1
+      - key: LLM_MODEL
+        value: llama-3.3-70b-versatile
+      - key: LLM_API_KEY
+        sync: false
+      - key: DATABASE_PATH
+        value: /tmp/reliefstream.db
