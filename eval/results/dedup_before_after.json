@@ -1,0 +1,109 @@
+{
+  "meta": {
+    "method": "Location normalisation (abbrev expand, stopword drop) + max(token Jaccard, containment\u22653 tokens, SequenceMatcher, Latin-only fold). Conflicting street numbers penalised unless one number-set \u2286 the other. Soft request_type pairs for flood ontology; urgency waived when location sim\u22650.95. Threshold 0.75. Cluster-level holdout: clusters sorted, first half=dev, second=test. Matcher refined using DEV FNs/FPs (Tamil/Latin fold, short-name containment floor); TEST evaluated once after freeze.",
+    "model": "qwen2.5:1.5b",
+    "n_messages": 41,
+    "holdout_dev_clusters": [
+      "c01",
+      "c02",
+      "c03",
+      "c04",
+      "c05",
+      "c06",
+      "c07",
+      "c08",
+      "c09",
+      "c10",
+      "c11",
+      "c12",
+      "c13",
+      "c14",
+      "c15"
+    ],
+    "holdout_test_clusters": [
+      "c16",
+      "c17",
+      "c18",
+      "c19",
+      "c20",
+      "c21",
+      "c22",
+      "c23",
+      "c24",
+      "c25",
+      "c26",
+      "c27",
+      "c28",
+      "c29",
+      "cn01",
+      "cn02"
+    ],
+    "loc_threshold": 0.75
+  },
+  "before_published_llm_exact_fingerprint": {
+    "precision": 1.0,
+    "recall": 0.5455,
+    "f1": 0.7059,
+    "tp": 6,
+    "fp": 0,
+    "fn": 5
+  },
+  "after_llm_fuzzy_full": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "tp": 11,
+    "fp": 0,
+    "fn": 0
+  },
+  "after_llm_fuzzy_holdout_dev": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "tp": 8,
+    "fp": 0,
+    "fn": 0
+  },
+  "after_llm_fuzzy_holdout_test": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "tp": 3,
+    "fp": 0,
+    "fn": 0
+  },
+  "gold_oracle_fuzzy_full": {
+    "precision": 0.9167,
+    "recall": 1.0,
+    "f1": 0.9565,
+    "tp": 11,
+    "fp": 1,
+    "fn": 0
+  },
+  "gold_oracle_fuzzy_holdout_test": {
+    "precision": 1.0,
+    "recall": 1.0,
+    "f1": 1.0,
+    "tp": 3,
+    "fp": 0,
+    "fn": 0
+  },
+  "extraction_micro": {
+    "precision": 0.9009,
+    "recall": 0.9009,
+    "f1": 0.9009,
+    "tp": 100,
+    "fp": 11,
+    "fn": 11
+  },
+  "actionable_classification": {
+    "precision": 0.8889,
+    "recall": 0.96,
+    "f1": 0.9231,
+    "tp": 24,
+    "fp": 3,
+    "fn": 1,
+    "tn": 9,
+    "accuracy": 0.8919
+  }
+}

@@ -1,0 +1,22 @@
+# Local stack: ReliefStream + Ollama (fully offline LLM).
+#   docker compose up -d
+#   docker compose exec ollama ollama pull qwen2.5:7b   # first run only
+#   open http://localhost:8000/ui
+services:
+  api:
+    build: .
+    ports: ["8000:8000"]
+    environment:
+      LLM_BASE_URL: http://ollama:11434/v1
+      LLM_API_KEY: ollama
+      LLM_MODEL: ${LLM_MODEL:-qwen2.5:7b}
+      ALLOW_ORIGIN: http://localhost:8000
+    volumes: ["reliefstream-data:/data"]
+    depends_on: [ollama]
+  ollama:
+    image: ollama/ollama:latest
+    ports: ["11434:11434"]
+    volumes: ["ollama-models:/root/.ollama"]
+volumes:
+  reliefstream-data:
+  ollama-models:
