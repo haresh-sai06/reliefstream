@@ -106,7 +106,7 @@ Located in `backend/storage.py`. Single-file database at `reliefstream.db` (path
 
 The `requests` table retains the original message and workflow state. The `request_identities` table maps unique dedup keys to canonical request IDs. At startup, legacy rows are backfilled without deletion or merging. If old rows share the same new identity, the oldest is the target for future repeated ingests; every historical row remains accessible. Back up the SQLite file before upgrading. Details lost by the old coarse dedup rule cannot be reconstructed.
 
-Claim and triage updates check affected rows in the same transaction that reads the successful result. Rejected transitions return HTTP409 (or404 for a missing record) and emit no success event. The frontend reports failed writes and keeps the form open. This does not add authentication or protect against an unauthorized caller; the local prototype still requires a trusted operator environment.
+Claim, triage and resolution updates check affected rows in the same transaction that reads the successful result. Resolution requires a claimed request, matching the dashboard workflow. Only the first successful resolution is retained; a repeated or concurrent resolution cannot replace its outcome, operator name or timestamp. Rejected transitions return HTTP409 (or404 for a missing record) and emit no success event. The frontend reports failed writes and keeps the form open. This does not add authentication or verify an operator's identity; the local prototype still requires a trusted operator environment. Correcting an already resolved outcome requires a separately designed, auditable correction workflow, not a second resolve call.
 
 ### Why SQLite
 

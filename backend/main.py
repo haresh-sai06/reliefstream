@@ -156,7 +156,9 @@ async def triage(rid: str, body: ClaimRequest):
 async def resolve(rid: str, body: ResolveRequest):
     r = storage.resolve_request(rid, body.volunteer_name, body.outcome, body.note)
     if not r:
-        raise HTTPException(404, 'not found')
+        if not storage.get_request(rid):
+            raise HTTPException(404, 'not found')
+        raise HTTPException(409, 'request is not awaiting resolution')
     await _broadcast({'type': 'resolved', 'request_id': rid, 'outcome': body.outcome})
     return r
 

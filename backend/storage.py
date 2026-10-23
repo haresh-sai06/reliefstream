@@ -180,15 +180,19 @@ def triage_unparseable(rid: str, volunteer: str, note: str) -> Optional[RescueRe
 
 
 def resolve_request(rid: str, volunteer: str, outcome: str, note: Optional[str]) -> Optional[RescueRequest]:
+    """Resolve one claimed request without overwriting an existing outcome."""
     now = datetime.utcnow().isoformat()
     combined_note = f'[{outcome}] {note or ""}'.strip()
     with _conn() as c:
-        c.execute(
+        updated = c.execute(
             'UPDATE requests SET status = ?, resolved_by = ?, resolved_note = ?, updated_at = ? '
-            'WHERE id = ?',
-            ('resolved', volunteer, combined_note, now, rid)
+            'WHERE id = ? AND status = ?',
+            ('resolved', volunteer, combined_note, now, rid, 'claimed')
         )
-    return get_request(rid)
+        if updated.rowcount != 1:
+            return None
+        row = c.execute('SELECT * FROM requests WHERE id = ?', (rid,)).fetchone()
+        return _row_to_request(row)
 
 
 def stats() -> dict:

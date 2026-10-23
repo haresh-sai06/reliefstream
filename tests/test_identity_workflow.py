@@ -101,6 +101,31 @@ class StorageRegressionTests(unittest.TestCase):
         self.assertEqual(storage.get_request(request.id).claimed_by, 'Synthetic A')
         self.assertIsNone(storage.claim_request('missing', 'Synthetic A'))
 
+    def test_resolution_requires_claim_and_preserves_first_outcome(self):
+        request, _ = self.ingest(extracted=ExtractedFields(parseable=False))
+        self.assertIsNone(storage.resolve_request(request.id, 'Synthetic A', 'helped', 'too early'))
+        storage.triage_unparseable(request.id, 'Synthetic A', 'reviewed')
+        self.assertIsNone(storage.resolve_request(request.id, 'Synthetic A', 'helped', 'not claimed'))
+        fresh, _ = self.ingest('Another synthetic household')
+        self.assertIsNone(storage.resolve_request(fresh.id, 'Synthetic A', 'helped', 'not claimed'))
+        storage.claim_request(request.id, 'Synthetic A')
+        first = storage.resolve_request(request.id, 'Synthetic A', 'helped', 'original outcome')
+        self.assertEqual(first.status, 'resolved')
+        self.assertIsNone(storage.resolve_request(request.id, 'Synthetic B', 'wrong_info', 'overwrite'))
+        self.assertEqual(storage.get_request(request.id), first)
+        self.assertIsNone(storage.resolve_request('missing', 'Synthetic A', 'helped', None))
+
+    def test_concurrent_resolutions_keep_exactly_one_outcome(self):
+        request, _ = self.ingest()
+        storage.claim_request(request.id, 'Synthetic A')
+        attempts = [('Synthetic A', 'helped', 'first test outcome'),
+                    ('Synthetic B', 'wrong_info', 'second test outcome')]
+        with ThreadPoolExecutor(max_workers=2) as workers:
+            results = list(workers.map(lambda args: storage.resolve_request(request.id, *args), attempts))
+        winners = [result for result in results if result is not None]
+        self.assertEqual(len(winners), 1)
+        self.assertEqual(storage.get_request(request.id), winners[0])
+
     def test_legacy_migration_is_idempotent_and_preserves_all_rows(self):
         with closing(sqlite3.connect(self.db)) as connection:
             with connection:
@@ -167,6 +192,25 @@ class HTTPRegressionTests(unittest.TestCase):
         path = f"/requests/{request['id']}/triage"
         self.assertEqual(self.client.post(path, json={'volunteer_name': 'Synthetic A'}).status_code, 200)
         self.assertEqual(self.client.post(path, json={'volunteer_name': 'Synthetic B'}).status_code, 409)
+        self.assertEqual(self.events.await_count, 1)
+
+    def test_api_rejects_invalid_resolution_and_emits_one_success_event(self):
+        request = self.client.post('/ingest', json={'text': 'Household A needs rescue'}).json()
+        path = f"/requests/{request['id']}/resolve"
+        payload = {'volunteer_name': 'Synthetic A', 'outcome': 'helped', 'note': 'original outcome'}
+        self.events.reset_mock()
+        self.assertEqual(self.client.post(path, json=payload).status_code, 409)
+        self.assertEqual(self.events.await_count, 0)
+        self.client.post(f"/requests/{request['id']}/claim", json={'volunteer_name': 'Synthetic A'})
+        self.events.reset_mock()
+        first = self.client.post(path, json=payload)
+        self.assertEqual(first.status_code, 200)
+        payload.update(volunteer_name='Synthetic B', outcome='wrong_info', note='overwrite')
+        self.assertEqual(self.client.post(path, json=payload).status_code, 409)
+        self.assertEqual(self.client.get(f"/requests/{request['id']}").json(), first.json())
+        self.assertEqual(self.events.await_count, 1)
+        self.assertEqual(self.events.await_args.args[0]['outcome'], 'helped')
+        self.assertEqual(self.client.post('/requests/missing/resolve', json=payload).status_code, 404)
         self.assertEqual(self.events.await_count, 1)
 
 
