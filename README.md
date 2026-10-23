@@ -141,3 +141,8 @@ FastAPI · Pydantic · SQLite · OpenAI-compatible LLM (Ollama / Groq / OpenRout
 ## License
 
 MIT. Built for Code for Communities 2026.
+
+
+## LoRA fine-tune (extraction)
+
+A LoRA adapter on Qwen2.5-0.5B-Instruct, trained only on 600 synthetic messages (0 near-duplicates with the test set), raises extraction micro-F1 on the 41-message test set from **0.703 → 0.921**, takes JSON validity from 97.6% → 100%, and cuts p95 latency from 8.2 s → 4.0 s on CPU against the same model prompt-only. Method, full table and limitations: [`finetune/README.md`](finetune/README.md).

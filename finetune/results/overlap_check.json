@@ -1,0 +1,42 @@
+{
+  "n_train": 600,
+  "n_test": 41,
+  "exact_duplicates": 0,
+  "near_duplicates(token_set_ratio>=80 or jaccard>=0.5)": 0,
+  "max_token_set_ratio": 77.04918032786885,
+  "max_jaccard": 0.44,
+  "closest_pair": {
+    "train": "s0449",
+    "test": "d08"
+  },
+  "test_place_tokens_checked": [
+    "aiyer",
+    "board",
+    "course",
+    "flyover",
+    "ganapathy",
+    "hope",
+    "karumariamman",
+    "kavundampalayam",
+    "kovil",
+    "kuniyamuthur",
+    "manikaran",
+    "nanjundapuram",
+    "palkalai",
+    "palladam",
+    "peelamedu",
+    "puliyakulam",
+    "race",
+    "ramanathapuram",
+    "ranga",
+    "rspuram",
+    "saibaba",
+    "sanitary",
+    "selvapuram",
+    "singanallur",
+    "vadavalli",
+    "vellalore"
+  ],
+  "train_rows_with_test_place_token": 0,
+  "train_rows_with_test_phone": 0
+}
