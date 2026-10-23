@@ -15,7 +15,7 @@ import extractor, run_eval  # noqa: E402
 
 ap = argparse.ArgumentParser()
 ap.add_argument("--variant", choices=["base", "lora"], required=True)
-ap.add_argument("--adapter", default=str(ROOT / "finetune/out/lora-qwen2.5-1.5b/final"))
+ap.add_argument("--adapter", default=str(ROOT / "finetune/out/lora-qwen2.5-0.5b/final"))
 ap.add_argument("--out", required=True)
 a = ap.parse_args()
 C = json.loads((ROOT / "finetune/config.json").read_text())
@@ -33,7 +33,7 @@ class _Msg:  # mimic the OpenAI response object extractor.extract() expects
 
 class _Completions:
     def create(self, model=None, messages=None, max_tokens=400, **_):
-        ids = tok.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt")
+        ids = tok.apply_chat_template(messages, add_generation_prompt=True, return_tensors="pt", return_dict=True)["input_ids"]
         with torch.no_grad():
             out = globals()["model"].generate(ids, max_new_tokens=max_tokens, do_sample=False)
         text = tok.decode(out[0, ids.shape[1]:], skip_special_tokens=True)

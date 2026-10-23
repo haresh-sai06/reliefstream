@@ -12,11 +12,13 @@ from extractor import SYSTEM_PROMPT  # same prompt the production extractor uses
 C = json.loads((ROOT / "finetune/config.json").read_text())
 torch.manual_seed(C["seed"]); random.seed(C["seed"]); torch.set_num_threads(8)
 tok = AutoTokenizer.from_pretrained(C["local_model_dir"])
-model = AutoModelForCausalLM.from_pretrained(C["local_model_dir"], torch_dtype=getattr(torch, C["dtype"]))
+model = AutoModelForCausalLM.from_pretrained(C["local_model_dir"], torch_dtype=torch.float32)  # fp32 master weights; bf16 only via autocast (pure-bf16 run went NaN)
 model.gradient_checkpointing_enable(); model.enable_input_require_grads()
 L = C["lora"]
 model = get_peft_model(model, LoraConfig(r=L["r"], lora_alpha=L["alpha"], lora_dropout=L["dropout"],
                                          target_modules=L["target_modules"], task_type="CAUSAL_LM"))
+for n, p in model.named_parameters():  # trainable LoRA weights in fp32 (bf16 Adam updates went NaN at step 13)
+    if p.requires_grad: p.data = p.data.float()
 model.print_trainable_parameters()
 
 def encode(row):
@@ -45,9 +47,13 @@ for step in range(start, total):
     acc = 0.0
     for k in range(C["grad_accum"]):
         ids, lab = encode(rows[(step * C["grad_accum"] + k) % len(rows)])
-        loss = model(input_ids=ids, labels=lab).loss / C["grad_accum"]
+        with torch.autocast("cpu", dtype=getattr(torch, C["dtype"])):
+            loss = model(input_ids=ids, labels=lab).loss / C["grad_accum"]
+        if not torch.isfinite(loss): print("non-finite loss, skipping micro-batch", flush=True); continue
         loss.backward(); acc += loss.item()
-    torch.nn.utils.clip_grad_norm_(model.parameters(), 1.0); opt.step(); sched.step(); opt.zero_grad()
+    gn = torch.nn.utils.clip_grad_norm_([p for p in model.parameters() if p.requires_grad], 1.0)
+    if not torch.isfinite(gn): print("non-finite grad norm, skipping step", flush=True); opt.zero_grad(); sched.step(); continue
+    opt.step(); sched.step(); opt.zero_grad()
     rec = {"step": step + 1, "of": total, "loss": round(acc, 4), "lr": sched.get_last_lr()[0], "elapsed_s": round(time.time() - t0, 1)}
     print(json.dumps(rec), flush=True); log.write(json.dumps(rec) + "\n"); log.flush()
     if (step + 1) % C["checkpoint_every_steps"] == 0 or step + 1 == total:
