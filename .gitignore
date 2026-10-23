@@ -26,3 +26,8 @@ Thumbs.db
 data/
 reports/local/
 !.gitkeep
+
+# LoRA fine-tune: keep weights/checkpoints out of git
+finetune/out/
+!finetune/data/
+!finetune/data/*.jsonl

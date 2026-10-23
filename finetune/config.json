@@ -1,0 +1,5 @@
+{"base_model": "Qwen/Qwen2.5-1.5B-Instruct", "local_model_dir": "/workspace/project-creation/models/qwen2.5-1.5b-instruct-hf",
+ "train_file": "finetune/data/train_synth.jsonl", "n_train": 600, "seed": 13,
+ "lora": {"r": 16, "alpha": 32, "dropout": 0.05, "target_modules": ["q_proj", "k_proj", "v_proj", "o_proj"]},
+ "epochs": 1, "lr": 2e-4, "batch_size": 1, "grad_accum": 8, "max_len": 768, "dtype": "bfloat16",
+ "checkpoint_every_steps": 15, "output_dir": "finetune/out/lora-qwen2.5-1.5b"}
