@@ -7,7 +7,7 @@ A walkthrough of every stage in the ReliefStream pipeline, why each design choic
 1. **A wrong answer is worse than no answer.** Everything downstream of the extractor branches on `parseable: bool`. Requests that can't be confidently parsed go to a human, never into the actionable queue.
 2. **Runs on a laptop offline.** The entire stack — LLM, DB, API, UI — runs on a single machine with no cloud dependency. During a real flood, cellular data is saturated and cloud API rate limits kick in exactly when you need them least.
 3. **One file per concern, no build step.** SQLite is one file. `main.py` is FastAPI. `index.html` is the frontend. Anyone can `cp -r reliefstream/ backup/` and deploy elsewhere in seconds.
-4. **Fingerprint everything.** WhatsApp forwards the same rescue request 40 times. A dashboard flooded with duplicates is worse than one that dedups aggressively.
+4. **Preserve distinct requests.** Repeated ingests should be idempotent, but a shared location or model classification does not establish that two households are the same.
 
 ---
 
@@ -79,14 +79,14 @@ This is defense-in-depth. Even if the LLM sets `parseable=true` inappropriately,
 
 ## Stage 3 — Fingerprint + dedup
 
-Located in `backend/storage.py`, function `_fingerprint(text, extracted)`.
+Located in `backend/storage.py`, function `_fingerprint(text, source, external_id)`.
 
 ### Two-tier fingerprinting
 
-- **If extraction succeeded:** fingerprint = SHA256 of `location|request_type|urgency`. Two messages about "rooftop rescue at Ganapathy 4th street immediate" collapse to one card even if the wording differs.
-- **If extraction failed:** fingerprint = SHA256 of normalized text (lowercase, punctuation stripped, whitespace collapsed). Prevents exact duplicates in the "read yourself" pile.
+- **If a source ID is supplied:** hash the versioned tuple of source and external ID. IDs from different sources remain separate. Re-ingesting an edited post with the same source ID counts a repeat; it does not replace the stored message.
+- **Otherwise:** hash the source and the full message, case-folded with whitespace collapsed. Preserve punctuation and the entire text. Different messages or sources remain separate even if the model reports the same location, urgency and type. Identical generic messages from the same source can still collide; supply reliable external IDs when available.
 
-On duplicate: `duplicate_count` increments, the original record's `updated_at` refreshes. The UI shows a `×N` badge to indicate how many times a request was forwarded — high N is a signal that this request is real and urgent.
+On a repeated identity, `duplicate_count` increments and `updated_at` refreshes. The `×N` badge counts ingests, not independent witnesses, verified truth or urgency. A SQLite write transaction serializes identity lookup and insertion; a primary-key identity map prevents concurrent duplicate requests.
 
 ### Why not embed-based dedup?
 
@@ -96,7 +96,7 @@ Considered semantic dedup via embeddings but rejected for MVP because:
 - Adds a vector DB dependency
 - False positives are dangerous — merging "grandma stuck on rooftop at X" with "grandma stuck on rooftop at Y" loses critical information
 
-Sticking with exact-field-match dedup keeps the system predictable. Phase 3 can add embedding-based near-dup detection with careful thresholds.
+Keep potential near-duplicates separate for human review rather than automatically merging households based on extracted fields.
 
 ---
 
@@ -104,7 +104,9 @@ Sticking with exact-field-match dedup keeps the system predictable. Phase 3 can 
 
 Located in `backend/storage.py`. Single-file database at `reliefstream.db` (path configurable via `DATABASE_PATH` env var).
 
-Schema is a single `requests` table with indexes on `fingerprint` (dedup), `status` (filtering), `created_at` (chronological listing).
+The `requests` table retains the original message and workflow state. The `request_identities` table maps unique dedup keys to canonical request IDs. At startup, legacy rows are backfilled without deletion or merging. If old rows share the same new identity, the oldest is the target for future repeated ingests; every historical row remains accessible. Back up the SQLite file before upgrading. Details lost by the old coarse dedup rule cannot be reconstructed.
+
+Claim, triage and resolution updates check affected rows in the same transaction that reads the successful result. Resolution requires a claimed request, matching the dashboard workflow. Only the first successful resolution is retained; a repeated or concurrent resolution cannot replace its outcome, operator name or timestamp. Rejected transitions return HTTP409 (or404 for a missing record) and emit no success event. The frontend reports failed writes and keeps the form open. This does not add authentication or verify an operator's identity; the local prototype still requires a trusted operator environment. Correcting an already resolved outcome requires a separately designed, auditable correction workflow, not a second resolve call.
 
 ### Why SQLite
 

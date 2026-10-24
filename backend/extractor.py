@@ -8,6 +8,11 @@ from models import ExtractedFields
 LLM_BASE_URL = os.getenv('LLM_BASE_URL', 'http://localhost:11434/v1')
 LLM_API_KEY = os.getenv('LLM_API_KEY', 'ollama')
 LLM_MODEL = os.getenv('LLM_MODEL', 'qwen2.5:7b')
+REQUEST_CUES = re.compile(
+    r'\b(?:need|needs|needed|help|rescue|stuck|trapped|stranded|urgent|'
+    r'please|boat|ambulance|insulin|medicine|wheelchair|injured|fracture|fractured|fever)\b',
+    re.IGNORECASE,
+)
 
 _client = OpenAI(
     api_key=LLM_API_KEY or 'sk-dummy',
@@ -97,7 +102,51 @@ def extract(raw_text: str) -> ExtractedFields:
             notes=f'Schema validation failed: {str(e)[:100]}',
         )
 
-    # Enforce: parseable requires location + urgency + type + confidence >= 0.4
+    return ground_to_source(result, raw_text)
+
+
+def ground_to_source(result: ExtractedFields, raw_text: str) -> ExtractedFields:
+    """Drop contacts, coordinates and locations that are not present in the message.
+
+    The model is instructed not to invent these fields. This check is the
+    deterministic backstop: a place or phone that the message does not contain
+    cannot be shown to volunteers as fact.
+    """
+    notes = []
+    source_digits = re.sub(r'\D', '', raw_text)
+    if result.contact:
+        contact_digits = re.sub(r'\D', '', result.contact)
+        if len(contact_digits) < 6 or contact_digits not in source_digits:
+            result.contact = None
+            notes.append('dropped a contact number that is not in the message')
+
+    for coord in ('lat', 'lon'):
+        value = getattr(result, coord)
+        if value is None:
+            continue
+        rendered = {str(value), f'{value:.4f}', f'{value:.5f}', f'{value:.6f}'}
+        if not any(item and item in raw_text for item in rendered):
+            setattr(result, coord, None)
+            notes.append(f'dropped {coord} that is not in the message')
+
+    if result.location:
+        tokens = re.findall(r'[^\W\d_]{4,}', result.location, flags=re.UNICODE)
+        source = raw_text.casefold()
+        long_tokens = [token for token in tokens if len(token) >= 5]
+        required = long_tokens or tokens
+        if not required or not any(token.casefold() in source for token in required):
+            result.location = None
+            result.parseable = False
+            notes.append('dropped a location that is not grounded in the message')
+
+    if result.parseable and not _reads_as_help_request(raw_text):
+        result.parseable = False
+        notes.append('message does not read as a request for help')
+
+    if notes:
+        extra = '; '.join(notes)
+        result.notes = f'{result.notes}; {extra}' if result.notes else extra
+
     if (not result.location
             or result.urgency == 'unknown'
             or result.request_type == 'unknown'
@@ -105,5 +154,11 @@ def extract(raw_text: str) -> ExtractedFields:
         result.parseable = False
         if not result.notes:
             result.notes = 'Missing one of {location, urgency, request_type} or confidence < 0.4'
-
     return result
+
+
+def _reads_as_help_request(raw_text: str) -> bool:
+    """Latin-script text must contain a request cue. Tamil and Hindi stay on the model."""
+    if re.search(r'[\u0900-\u097F\u0B80-\u0BFF]', raw_text):
+        return True
+    return REQUEST_CUES.search(raw_text) is not None

@@ -133,7 +133,9 @@ async def get_one(rid: str):
 async def claim(rid: str, body: ClaimRequest):
     r = storage.claim_request(rid, body.volunteer_name)
     if not r:
-        raise HTTPException(404, 'not found or not claimable')
+        if not storage.get_request(rid):
+            raise HTTPException(404, 'not found')
+        raise HTTPException(409, 'request is no longer claimable')
     await _broadcast({'type': 'claimed', 'request_id': rid, 'by': body.volunteer_name})
     return r
 
@@ -143,7 +145,9 @@ async def triage(rid: str, body: ClaimRequest):
     """Move an unparseable request into actionable queue after human review."""
     r = storage.triage_unparseable(rid, body.volunteer_name, note='human-triaged')
     if not r:
-        raise HTTPException(404, 'not found or not in unparseable state')
+        if not storage.get_request(rid):
+            raise HTTPException(404, 'not found')
+        raise HTTPException(409, 'request is no longer awaiting triage')
     await _broadcast({'type': 'triaged', 'request_id': rid, 'by': body.volunteer_name})
     return r
 
@@ -152,7 +156,9 @@ async def triage(rid: str, body: ClaimRequest):
 async def resolve(rid: str, body: ResolveRequest):
     r = storage.resolve_request(rid, body.volunteer_name, body.outcome, body.note)
     if not r:
-        raise HTTPException(404, 'not found')
+        if not storage.get_request(rid):
+            raise HTTPException(404, 'not found')
+        raise HTTPException(409, 'request is not awaiting resolution')
     await _broadcast({'type': 'resolved', 'request_id': rid, 'outcome': body.outcome})
     return r
 

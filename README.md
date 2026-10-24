@@ -34,7 +34,7 @@ Existing government helplines exist but are structured (call, form, wait). The c
 
 1. **Ingests** raw social media text (paste-in or webhook)
 2. **Extracts** structured fields via LLM: location, urgency, request type, people affected, contact number
-3. **Deduplicates** — a request forwarded 40 times becomes one card with 40 "confirmed by" markers
+3. **Counts repeated ingests** — matching source IDs, or matching full normalized messages from the same source, reuse one card. The count is not independent confirmation; different households are kept separate.
 4. **Maps** all requests as pins on Leaflet with severity color-coding
 5. **Assigns** — volunteers claim requests, mark them resolved, log outcomes
 6. **Surfaces failures** — when the model can't parse a location, that request goes to a **"Read this yourself"** pile visible to a human operator, never silently dropped
@@ -96,7 +96,7 @@ See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the full walkthrough.
 | **Server-Sent Events over WebSockets** | Simpler; volunteers only receive updates, don't need to push |
 | **Vanilla JS + Leaflet** | No build step, single HTML file, works on any browser without npm |
 | **Explicit "unparseable" queue** | The safety pattern the mentor brief flags is non-negotiable — chose to build it in from day 1, not add it later |
-| **Fingerprint dedup** | Twitter/WhatsApp copies the same rescue request 40× — hashing keeps the queue clean |
+| **Conservative identity dedup** | Source IDs or full message text identify repeats; location/urgency/type alone cannot identify a household |
 
 ---
 
@@ -142,6 +142,22 @@ Prerequisites: `ollama pull qwen2.5:7b` if not already local. Or swap `.env` to 
 Sample data to test with is in [`sample_data/`](sample_data/) — realistic-style rescue messages you can paste into the dashboard ingest form.
 
 ---
+
+## Regression checks
+
+From the repository root, create a virtual environment, then run:
+
+```bash
+python -m pip install -r requirements-dev.txt
+python -m unittest discover -s tests -p 'test_*.py' -v
+node --test tests/workflow.test.cjs
+```
+
+The tests use temporary SQLite files, synthetic messages and a stub extractor through actual HTTP handlers; no model, credentials or external service is contacted. Node's built-in test runner checks how the browser write helper handles conflicts and network errors. These checks do not verify a real model, real-browser rendering or emergency use.
+
+`tests/run_corpus_eval.py` is separate. It calls a local model and is not part of CI. On 24 October 2026, local `qwen2.5:7b` scored the sample corpus with 0 safety failures on 12 non-requests and 14 of 17 other messages parseable with a grounded location. See the [TRL self-assessment](docs/TRL-ASSESSMENT.md). That result is laboratory evidence for **TRL 4**. It is not a field deployment.
+
+Before upgrading an existing database, back it up. Startup adds an identity map and preserves all old rows. New repeats use a canonical record; previously discarded household details cannot be recovered. See [identity and workflow notes](docs/ARCHITECTURE.md#stage-3--fingerprint--dedup).
 
 ## Cost
 

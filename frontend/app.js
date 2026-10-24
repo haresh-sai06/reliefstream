@@ -206,11 +206,13 @@ function closeModal() { document.getElementById('modal').classList.add('hidden')
 async function doClaim(rid) {
   const name = document.getElementById('volunteer').value.trim();
   if (!name) { alert('Enter your name'); return; }
-  await fetch(`${API}/requests/${rid}/claim`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ volunteer_name: name }),
-  });
+  try {
+    await sendWorkflowUpdate(`${API}/requests/${rid}/claim`, { volunteer_name: name });
+  } catch (error) {
+    alert(error.message);
+    await refresh();
+    return;
+  }
   closeModal();
   await refresh();
 }
@@ -218,11 +220,13 @@ async function doClaim(rid) {
 async function doTriage(rid) {
   const name = document.getElementById('volunteer').value.trim();
   if (!name) { alert('Enter your name'); return; }
-  await fetch(`${API}/requests/${rid}/triage`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ volunteer_name: name }),
-  });
+  try {
+    await sendWorkflowUpdate(`${API}/requests/${rid}/triage`, { volunteer_name: name });
+  } catch (error) {
+    alert(error.message);
+    await refresh();
+    return;
+  }
   closeModal();
   await refresh();
 }
@@ -232,11 +236,15 @@ async function doResolve(rid) {
   const outcome = document.getElementById('outcome').value;
   const note = document.getElementById('note').value.trim();
   if (!name) { alert('Enter your name'); return; }
-  await fetch(`${API}/requests/${rid}/resolve`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ volunteer_name: name, outcome, note: note || null }),
-  });
+  try {
+    await sendWorkflowUpdate(`${API}/requests/${rid}/resolve`, {
+      volunteer_name: name, outcome, note: note || null,
+    });
+  } catch (error) {
+    alert(error.message);
+    await refresh();
+    return;
+  }
   closeModal();
   await refresh();
 }
