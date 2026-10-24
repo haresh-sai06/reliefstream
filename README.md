@@ -155,6 +155,8 @@ node --test tests/workflow.test.cjs
 
 The tests use temporary SQLite files, synthetic messages and a stub extractor through actual HTTP handlers; no model, credentials or external service is contacted. Node's built-in test runner checks how the browser write helper handles conflicts and network errors. These checks do not verify a real model, real-browser rendering or emergency use.
 
+`tests/run_corpus_eval.py` is separate. It calls a local model and is not part of CI. On 24 October 2026, local `qwen2.5:7b` scored the sample corpus with 0 safety failures on 12 non-requests and 14 of 17 other messages parseable with a grounded location. See the [TRL self-assessment](docs/TRL-ASSESSMENT.md). That result is laboratory evidence for **TRL 4**. It is not a field deployment.
+
 Before upgrading an existing database, back it up. Startup adds an identity map and preserves all old rows. New repeats use a canonical record; previously discarded household details cannot be recovered. See [identity and workflow notes](docs/ARCHITECTURE.md#stage-3--fingerprint--dedup).
 
 ## Cost
