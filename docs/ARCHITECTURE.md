@@ -178,6 +178,10 @@ The tab was intentionally not hidden behind a "settings" menu or expandable sect
 
 Every state change (new request, claim, resolve) triggers an SSE event. The dashboard listens and refreshes. A 15-second polling fallback covers SSE reconnection gaps.
 
+### Ingest acknowledgement
+
+The form retains pasted text on HTTP failures, malformed responses or incomplete batch acknowledgements. It clears only after the server confirms a saved request ID and extraction status for every submitted item. All nonempty bulk lines are sent, including short messages such as `SOS`; backend validation rejects invalid batches instead of the browser silently dropping lines. A lost response can still follow a committed write, so operators should inspect the queue before retrying. Existing source/text deduplication helps repeated pastes but is not an exactly-once delivery guarantee.
+
 ---
 
 ## What's not in the MVP

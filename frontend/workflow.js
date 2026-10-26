@@ -13,6 +13,7 @@ async function sendWorkflowUpdate(url, payload) {
   if (!response.ok) {
     throw new Error(response.status === 409
       ? 'This request has changed. Close and reopen it to see its current state.'
-      : `Request could not be updated (HTTP ${response.status}). Please refresh and try again.`);
+      : `Request could not be updated (HTTP ${response.status}). Check its current state before retrying.`);
   }
+  return response;
 }
