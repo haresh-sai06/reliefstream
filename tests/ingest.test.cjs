@@ -87,3 +87,16 @@ test('bulk submission sends short nonempty messages instead of silently discardi
   assert.deepEqual(payload.map(item => item.text), ['Synthetic request one', 'SOS']);
   assert.equal(f.element('ingest-text').value, '');
 });
+
+test('acknowledging an earlier message cannot erase text entered while it was saving', async () => {
+  let acknowledge;
+  const response = new Promise(resolve => { acknowledge = resolve; });
+  const f = form(response);
+  const pending = f.submit();
+  f.element('ingest-text').value = 'A different synthetic request typed while waiting';
+  acknowledge({ok: true, json: async () => ({id: 'saved', extracted: {parseable: true}})});
+  await pending;
+  assert.equal(f.element('ingest-text').value, 'A different synthetic request typed while waiting');
+  assert.match(f.element('ingest-result').textContent, /Newer text has been kept/);
+  assert.equal(f.calls.length, 1);
+});

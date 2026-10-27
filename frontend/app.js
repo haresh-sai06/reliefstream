@@ -292,7 +292,12 @@ document.getElementById('ingest-btn').addEventListener('click', async () => {
         resultEl.className = 'ingest-result warn';
       }
     }
-    document.getElementById('ingest-text').value = '';
+    const input = document.getElementById('ingest-text');
+    if (input.value.trim() === text) {
+      input.value = '';
+    } else if (input.value.trim()) {
+      resultEl.textContent += ' Newer text has been kept for your next submission.';
+    }
   } catch (e) {
     resultEl.textContent = `Error: ${e.message}`;
     resultEl.className = 'ingest-result err';
