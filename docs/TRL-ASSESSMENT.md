@@ -31,6 +31,12 @@ The model is still instructed not to invent a place or a phone number. `ground_t
 
 ## Remaining work for TRL 5
 
+26 October follow-up: 21 Python and 11 Node tests pass locally, including seven tests that execute the actual ingest listener with synthetic DOM/fetch fixtures. Four failure scenarios were reproduced before the ingest fix. Failed or incomplete acknowledgements now retain the pasted text, and short nonempty bulk messages are sent to validation. These are laboratory regressions, not a browser session, live model run or evidence for a higher TRL.
+
+27 October draft review: one additional delayed-response regression reproduced input loss when text was edited during a save. The acknowledgement now clears only the text it actually submitted. All 12 Node tests pass; the unchanged 21 Python checks retain their prior exact-base CI evidence. No browser, model, deployment or TRL change is claimed.
+
+29 October follow-up: [nine actual-browser smoke scenarios](evidence/2026-10-29-browser-smoke.md) passed against an isolated real backend/database and local `qwen2.5:7b`, including four model calls. The run covered intake, validation failures, short-message bulk intake, editing during a save, triage, claim, resolution and backend outage. Application bytes were unchanged apart from the served API origin used for isolated ports. This small synthetic English run does not establish a relevant operational environment; TRL 4 remains unchanged. The earlier dated results above describe their original test scope.
+
 - Run the dashboard in a browser against the same corpus and record the operator path: ingest, unparseable pile, claim, resolve.
 - Deploy that build where a volunteer can reach it, with a human watching the unparseable pile.
 - Repeat the corpus score on a fresh message set that was not used to choose the guard rules.

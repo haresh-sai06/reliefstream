@@ -264,24 +264,26 @@ document.getElementById('ingest-btn').addEventListener('click', async () => {
 
   try {
     if (bulk) {
-      const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 5);
+      const lines = text.split('\n').map(l => l.trim()).filter(Boolean);
       const items = lines.map(l => ({ text: l, source }));
-      const res = await fetch(`${API}/ingest/bulk`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(items),
-      });
+      const res = await sendWorkflowUpdate(`${API}/ingest/bulk`, items);
       const data = await res.json();
+      if (data.processed !== items.length || !Array.isArray(data.results)
+          || data.results.length !== items.length
+          || !data.results.every(r => r && typeof r.id === 'string' && r.id
+            && typeof r.parseable === 'boolean')) {
+        throw new Error('Server did not confirm the complete batch. Your messages have been kept. Check the queue before retrying.');
+      }
       const parseable = data.results.filter(r => r.parseable).length;
       resultEl.textContent = `Ingested ${data.processed} · parseable: ${parseable} · unparseable: ${data.processed - parseable}`;
       resultEl.className = 'ingest-result ok';
     } else {
-      const res = await fetch(`${API}/ingest`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ text, source }),
-      });
+      const res = await sendWorkflowUpdate(`${API}/ingest`, { text, source });
       const data = await res.json();
+      if (!data || typeof data.id !== 'string' || !data.id
+          || typeof data.extracted?.parseable !== 'boolean') {
+        throw new Error('Server did not confirm this message. Your text has been kept. Check the queue before retrying.');
+      }
       if (data.extracted && data.extracted.parseable) {
         resultEl.textContent = `Parsed: ${data.extracted.urgency} · ${data.extracted.request_type} · ${data.extracted.location || 'no location'}`;
         resultEl.className = 'ingest-result ok';
@@ -290,7 +292,12 @@ document.getElementById('ingest-btn').addEventListener('click', async () => {
         resultEl.className = 'ingest-result warn';
       }
     }
-    document.getElementById('ingest-text').value = '';
+    const input = document.getElementById('ingest-text');
+    if (input.value.trim() === text) {
+      input.value = '';
+    } else if (input.value.trim()) {
+      resultEl.textContent += ' Newer text has been kept for your next submission.';
+    }
   } catch (e) {
     resultEl.textContent = `Error: ${e.message}`;
     resultEl.className = 'ingest-result err';

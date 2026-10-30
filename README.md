@@ -150,7 +150,7 @@ From the repository root, create a virtual environment, then run:
 ```bash
 python -m pip install -r requirements-dev.txt
 python -m unittest discover -s tests -p 'test_*.py' -v
-node --test tests/workflow.test.cjs
+node --test tests/workflow.test.cjs tests/ingest.test.cjs
 ```
 
 The tests use temporary SQLite files, synthetic messages and a stub extractor through actual HTTP handlers; no model, credentials or external service is contacted. Node's built-in test runner checks how the browser write helper handles conflicts and network errors. These checks do not verify a real model, real-browser rendering or emergency use.
